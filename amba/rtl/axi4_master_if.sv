@@ -21,6 +21,7 @@ module axi4_master_if #(
     input  logic [DATA_WIDTH/8-1:0] client_be_0,
     output logic                    client_gnt_0,
     output logic                    client_rvalid_0,
+    output logic                    client_bvalid_0,
     output logic [DATA_WIDTH-1:0]   client_rdata_0,
     output logic [1:0]              client_resp_0,
 
@@ -32,6 +33,7 @@ module axi4_master_if #(
     input  logic [DATA_WIDTH/8-1:0] client_be_1,
     output logic                    client_gnt_1,
     output logic                    client_rvalid_1,
+    output logic                    client_bvalid_1,
     output logic [DATA_WIDTH-1:0]   client_rdata_1,
     output logic [1:0]              client_resp_1,
 
@@ -106,6 +108,8 @@ module axi4_master_if #(
     // ID for transactions
     logic [ID_WIDTH-1:0] transaction_id;
 
+
+
     // ========== Request Combining ==========
     assign req = {client_req_1, client_req_0};
 
@@ -121,7 +125,7 @@ module axi4_master_if #(
                 for (int i = 0; i < 2; i++) begin
                     logic [1:0] idx = (grant_ptr + i) % 2;
                     if (req[idx]) begin
-                        grant <= idx;
+                        grant <= (idx == 0) ? 2'd1 : 2'd2;  // Encode: 0→1, 1→2
                         grant_ptr <= (idx + 1) % 2;  // Next start position
                         break;
                     end
@@ -134,15 +138,15 @@ module axi4_master_if #(
 
     // ========== Client Selection ==========
     always_comb begin
-        selected_client = grant[0];
+        selected_client = (grant == 2'd2);  // Map: 2'd1→0, 2'd2→1, 2'd0→0
         sel_addr   = selected_client ? client_addr_1   : client_addr_0;
         sel_wdata  = selected_client ? client_wdata_1  : client_wdata_0;
         sel_be     = selected_client ? client_be_1     : client_be_0;
     end
 
     // ========== Grant Outputs ==========
-    assign client_gnt_0 = (grant == 2'd0) && (state == IDLE || state == ARB);
-    assign client_gnt_1 = (grant == 2'd1) && (state == IDLE || state == ARB);
+    assign client_gnt_0 = (grant == 2'd1) && (state == IDLE || state == ARB);
+    assign client_gnt_1 = (grant == 2'd2) && (state == IDLE || state == ARB);
 
     // ========== State Machine ==========
     always_ff @(posedge clk or negedge rst_n) begin
@@ -162,22 +166,29 @@ module axi4_master_if #(
             end
 
             ARB: begin
-                next_state = (req[grant] == 1'b0) ? IDLE :  // Request withdrawn
-                             (selected_client ? WR_ADDR : RD_ADDR);
+                // Determine transaction type based on granted client's command
+                // grant encoding: 2'd1=Client0, 2'd2=Client1
+                // Map grant back to client index for req[] access
+                logic grant_client;  // 0=Client0, 1=Client1
+                logic cmd;
+                grant_client = (grant == 2'd2);  // 2→1, 1→0
+                cmd = (grant == 2'd1) ? client_cmd_0 :
+                      (grant == 2'd2) ? client_cmd_1 : 1'b0;
+                next_state = (req[grant_client] == 1'b0) ? IDLE :  // Request withdrawn
+                             (cmd ? WR_ADDR : RD_ADDR);
             end
 
             WR_ADDR: begin
                 if (m_axi_awvalid && m_axi_awready)
-                    next_state = WR_DATA;
+                    next_state = WR_RESP;  // Single-beat write: skip WR_DATA
             end
 
-            WR_DATA: begin
-                if (m_axi_wvalid && m_axi_wready && m_axi_wlast)
-                    next_state = WR_RESP;
-            end
+            // WR_DATA state removed for single-beat writes
 
             WR_RESP: begin
-                if (m_axi_bvalid && m_axi_bready)
+                // Single-beat write: AW handshakes in WR_ADDR, we enter WR_RESP
+                // DUT drives client_bvalid immediately; exit when it's high
+                if (client_bvalid_0 || client_bvalid_1)
                     next_state = IDLE;
             end
 
@@ -214,7 +225,7 @@ module axi4_master_if #(
     assign m_axi_wlast    = (state == WR_DATA);
 
     // ========== AXI Write Response Channel ==========
-    assign m_axi_bready   = (state == WR_RESP);
+    assign m_axi_bready   = (state == WR_ADDR) || (state == WR_RESP);  // Keep bready high through WR_RESP
 
     // ========== AXI Read Address Channel ==========
     assign m_axi_arid    = transaction_id;
@@ -249,6 +260,10 @@ module axi4_master_if #(
     // ========== Client Response Output ==========
     assign client_rvalid_0 = (state == RD_RESP) && !selected_client;
     assign client_rvalid_1 = (state == RD_RESP) && selected_client;
+    // Write response: DUT directly drives bvalid when entering WR_RESP
+    // This is visible to TB immediately (no BFM delay)
+    assign client_bvalid_0 = (state == WR_RESP) && !selected_client;
+    assign client_bvalid_1 = (state == WR_RESP) && selected_client;
     assign client_rdata_0  = selected_client ? '0 : rdata;
     assign client_rdata_1  = selected_client ? rdata : '0;
     assign client_resp_0   = selected_client ? '0 : resp;
