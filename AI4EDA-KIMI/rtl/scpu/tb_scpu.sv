@@ -22,6 +22,9 @@ module tb_scpu;
     always #5 clk = ~clk;
 
     initial begin
+        // $dumpfile("tb_scpu.vcd");
+        // $dumpvars(0, tb_scpu);
+
         repeat (2) @(posedge clk);
         if (pc !== 8'd0) begin
             $display("FAIL: reset PC=%0d, expected 0", pc);
