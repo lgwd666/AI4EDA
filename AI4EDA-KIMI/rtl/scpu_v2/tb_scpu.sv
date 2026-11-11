@@ -740,8 +740,8 @@ module tb_scpu;
     endtask
 
     initial begin
-        // $dumpfile("tb_scpu.vcd");
-        // $dumpvars(0, tb_scpu);
+        $dumpfile("tb_scpu.vcd");
+        $dumpvars(0, tb_scpu);
 
         rst_n = 1'b0;
 
