@@ -2,11 +2,13 @@ module scpu (
     input  logic       clk,
     input  logic       rst_n,
     input  logic [7:0] instr,
-    input  logic [7:0] io_rdata,
+    input  logic [7:0] switches,
+    input  logic [7:0] buttons,
     output logic [7:0] pc,
-    output logic       io_wen,
-    output logic [2:0] io_idx,
-    output logic [7:0] io_wdata
+    output logic       led_wen,
+    output logic [7:0] led_wdata,
+    output logic       seven_seg_wen,
+    output logic [7:0] seven_seg_wdata
 );
     localparam logic [1:0] OP_ADD   = 2'b00;
     localparam logic [1:0] OP_IO    = 2'b01;
@@ -18,6 +20,7 @@ module scpu (
     logic       is_li;
     logic       is_bner0;
     logic       io_dir;
+    logic [7:0] io_rdata;
     logic [1:0] raddr1;
     logic [1:0] raddr2;
     logic [7:0] rdata1;
@@ -52,13 +55,16 @@ module scpu (
         endcase
     end
 
+    assign io_rdata = instr[2:0] == 3'd0 ? switches
+                    : instr[2:0] == 3'd1 ? buttons : 8'h00;
     assign add_data = rdata1 + rdata2;
     assign wdata    = is_li ? li_data
                     : is_io ? io_rdata : add_data;
 
-    assign io_wen   = rst_n && is_io && io_dir;
-    assign io_idx   = instr[2:0];
-    assign io_wdata = rdata1;
+    assign led_wen        = rst_n && is_io && io_dir && instr[2:0] == 3'd0;
+    assign led_wdata      = rdata1;
+    assign seven_seg_wen  = rst_n && is_io && io_dir && instr[2:0] == 3'd1;
+    assign seven_seg_wdata = rdata1;
 
     assign branch_offset = {{4{instr[5]}}, instr[5:2]};
     assign pc_step = is_bner0 && (rdata1 != rdata2) ? branch_offset : 8'd1;
