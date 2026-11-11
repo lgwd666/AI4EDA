@@ -1,6 +1,6 @@
 # sCPU v2（F6 sISA v2）验证策略
 
-本目录验证 `scpu.sv` + `dff_pn.sv` 组成的 8 位单周期 CPU，以及 `sum_io.hex` 和三个定向测试程序。设备模型与输出保持寄存器位于 `tb_scpu.sv`，不属于处理器 RTL。
+本目录验证 `scpu.sv` + `dff_pn.sv` 组成的 8 位单周期 CPU，以及 `sum_io.hex` 和四个定向测试程序。设备模型与输出保持寄存器位于 `tb_scpu.sv`，不属于处理器 RTL。
 
 ## 1. 接口与设备译码
 
@@ -24,7 +24,8 @@
 5. `li` 的四种 `s`（移位 0/2/4/6）结果正确，特别验证 `li r0,192` 的编码 `0x8f`。
 6. `bner0` 的正偏移、负偏移和条件不成立行为正确，偏移相对当前 PC。
 7. 输出设备在源 GPR 改变后保持；输入指令、非 `io` 指令和复位期间两个输出写使能均为 0。
-8. testbench 具备 ROM 编码自检、超时保护和失败非零退出。
+8. `step_sum.hex` 只在按钮完成一次“按下并释放”后累加一项，长按不累加，累加结果只输出到 LED。
+9. testbench 具备 ROM 编码自检、超时保护和失败非零退出。
 
 ## 3. 文件与职责
 
@@ -36,9 +37,10 @@
 | `li_test.hex` | `li` 四种移位及 `li r0,192` |
 | `branch_test.hex` | `bner0` 正/负偏移、条件不成立和自循环 |
 | `io_test.hex` | 按钮输入、未定义输入编号、独立输出及输出保持 |
-| `tb_scpu.sv` | 四套测试系统、设备保持寄存器、逐拍自检、超时与 VCD 开关 |
+| `step_sum.hex` | 按下并释放一次累加一项，结果输出到 LED |
+| `tb_scpu.sv` | 五套测试系统、设备保持寄存器、逐拍自检、超时与 VCD 开关 |
 
-testbench 同时例化四套 `scpu_sys`（ROM + `scpu` + 输出设备模型），共享 `clk/rst_n`，按场景复位后分时运行。层次路径 `u_sum.dut.u_gpr.regs[0..3]`（以及其他系统对应路径）用于观察 GPR；内部 `io_rdata` 仅用于检查输入选择结果。
+testbench 同时例化五套 `scpu_sys`（ROM + `scpu` + 输出设备模型），共享 `clk/rst_n`，按场景复位后分时运行。层次路径 `u_sum.dut.u_gpr.regs[0..3]`（以及其他系统对应路径）用于观察 GPR；内部 `io_rdata` 仅用于检查输入选择结果。
 
 ## 4. 被测程序与预期
 
@@ -85,19 +87,46 @@ testbench 同时例化四套 `scpu_sys`（ROM + `scpu` + 输出设备模型）�
 
 最终 `PC=10`、`R1=1`、`R2=0`、`led=0xC0`、`seven_seg=0x01`。
 
+### 4.5 `step_sum.hex`
+
+该程序固定以 `switches=10` 为末项，LED 初始显示 0。每次检测到 `buttons=1` 后，还必须等待按钮回到 0，才执行一次 `i++` 和 `sum+=i`。第 1 次至第 10 次按下并释放后，LED 依次为 `1,3,6,10,15,21,28,36,45,55`。
+
+| PC | 指令 | 语义 |
+| --- | --- | --- |
+| 0 | `40` | R0←switches，读末项 N=10 |
+| 1~3 | `90 a0 b1` | 初始化 `i=0`、`sum=0`、R3=1 |
+| 4 | `68` | 将当前 sum 输出到 LED |
+| 5 | `81` | R0=1，作为按钮按下的比较值 |
+| 6 | `71` | R3←buttons |
+| 7 | `ff` | 按钮不为 1 时跳回 PC6，持续等待按下 |
+| 8 | `f3` | 按下后 R0=R3=1，顺序进入释放轮询；循环返回时 R0=10、R3=1，跳回 PC4 |
+| 9 | `80` | R0=0，作为按钮释放的比较值 |
+| 10 | `71` | R3←buttons |
+| 11 | `fb` | 按钮仍非 0 时跳回 PC9，持续等待释放 |
+| 12 | `40` | 重新读入 N=10 |
+| 13 | `b1` | 恢复常数 R3=1 |
+| 14 | `17` | `i++` |
+| 15 | `29` | `sum+=i` |
+| 16 | `e1` | 尚未到第 10 项时跳回 PC8，再由 PC8 返回 PC4 |
+| 17 | `68` | 将最终 sum=55 输出到 LED |
+| 18 | `c3` | 完成后自循环 |
+
+寄存器复用关系：R1 始终保存 `i`，R2 始终保存 `sum`；R0 在 N、1、0 之间切换，R3 在常数 1 与按钮采样值之间切换。PC8 同时承担按下后的顺序出口和循环跳转入口，使所有分支偏移都处于 `-8~+7` 范围内。
+
 ## 5. 测试场景与通过标准
 
 所有检查在时钟上升沿后 1ns 采样，使用 `$fatal(1, ...)` 在失败时立即非零退出。
 
-- 上电及每个场景前复位两拍，检查四套系统的 PC、GPR、输出寄存器和两个写使能。
+- 上电及每个场景前复位两拍，检查五套系统的 PC、GPR、输出寄存器和两个写使能。
 - `sum_io` 逐拍检查循环中的 PC/GPR、两个独立输出事务和最终自循环，并在自循环中验证异步复位。
 - `li` 每拍检查 PC 和目标 GPR，覆盖四种移位。
 - `branch` 检查完整 PC 轨迹及 GPR，确认应跳过的指令没有执行。
 - `io` 检查独立输入数据、未定义编号读 0、两个写使能互斥、写数据及设备保持。
+- `step_sum` 完整执行 10 次按下—保持—释放；每次长按三个轮询周期，检查 `i`、`sum` 和 LED 不变，释放后只累加一次；最终 PC18 自循环且 LED=55。
 - ROM 编码自检覆盖关键指令，防止 hex 文件写错后测试了其他程序。
 - 独立超时块在 `MAX_SIM_NS=10000` 后失败退出。
 
-通过标准：打印 `PASS: tb_scpu completed 193 checks (sum_io, branch, li, io)`，`vvp` 返回 0，且上述最终状态全部成立。
+通过标准：打印 `PASS: tb_scpu completed 583 checks (sum_io, branch, li, io, step_sum)`，`vvp` 返回 0，且上述最终状态全部成立。
 
 ## 6. 实际命令与结果
 
@@ -119,7 +148,8 @@ INFO: sum_io done: pc=9 R0=10 R1=10 R2=55 R3=1 led=55 seg=55
 INFO: branch_test done: pc=11 R0=3 R1=3 R2=4 R3=3
 INFO: li_test done: pc=8 R0=64 R1=12 R2=128 R3=3
 INFO: io_test done: pc=10 R0=0 R1=1 R2=0 R3=1 led=c0 seg=01
-PASS: tb_scpu completed 193 checks (sum_io, branch, li, io)
+INFO: step_sum done: pc=18 i=10 sum=55 led=55, 10 press-release cycles
+PASS: tb_scpu completed 583 checks (sum_io, branch, li, io, step_sum)
 ```
 
 - Icarus 仿真返回 0；短 hex 文件的 `$readmemh ... Not enough words` 提示为预期现象，ROM 其余地址已由初始化循环填 0。
@@ -149,15 +179,20 @@ PASS: tb_scpu completed 193 checks (sum_io, branch, li, io)
 | `u_io.led` / `u_io.seven_seg` | PC4/PC5 后均为 `0x3C`；PC7 后 LED 为 `0xC0`；PC9 后数码管为 `0x01` |
 | `u_li.pc` | `1..8,8...`；R0 第 1 拍为 192，第 5 拍变为 64 |
 | `u_branch.pc` | `4→2`、`6→8`、`9→10`，最后在 PC11 自循环 |
+| `u_step.pc` | 等待按下时在 PC6/7 往返；长按时在 PC9/10/11 往返；释放后依次执行 PC12~16 |
+| `u_step.dut.u_gpr.regs[1]` / `regs[2]` | 只在释放后分别更新 `i` 和 `sum`，等待与长按期间保持 |
+| `u_step.led_wen` / `u_step.led` | 初始输出 0；每次循环在 PC4 输出新和；最终 PC17 输出 55 |
+| `u_step.seven_seg_wen` / `u_step.seven_seg` | 写使能始终为 0，数码管保持 0 |
 | 各 `u_*.led` / `u_*.seven_seg` | 复位时为 0，仅在对应写使能有效的上升沿变化 |
 
 ## 8. RTL 观察与边界
 
 1. `idx` 是 `io` 指令字段，不是处理器对外总线端口；具体设备关联由 `scpu` 内部译码完成。
 2. 两个 `wdata` 均直接反映当前源 GPR，只有对应 `wen` 有效时才表示一次输出事务。
-3. `scpu_rom` 把未写入地址填为 `0x00`，它是合法的 `add R0,R0,R0`；所有测试程序均以自循环收尾，避免 PC 跑出程序区。
-4. `scpu.sv` 内同时定义 `scpu`、`scpu_gpr`、`scpu_rom`，因此 lint 命令保留 `-Wno-DECLFILENAME`。
-5. RTL 无延时语句且未声明 `timescale`，Icarus 的时间单位提示不影响本测试结果。
+3. `step_sum.hex` 的循环跳转和结束自循环以 N=10 为前提；没有扩展为任意末项，也未处理 F6 已说明的 N=0 情况。
+4. `scpu_rom` 把未写入地址填为 `0x00`，它是合法的 `add R0,R0,R0`；所有测试程序均以自循环收尾，避免 PC 跑出程序区。
+5. `scpu.sv` 内同时定义 `scpu`、`scpu_gpr`、`scpu_rom`，因此 lint 命令保留 `-Wno-DECLFILENAME`。
+6. RTL 无延时语句且未声明 `timescale`，Icarus 的时间单位提示不影响本测试结果。
 
 ## 9. 生成物清理
 

@@ -82,6 +82,7 @@ module tb_scpu;
     localparam integer SYS_BRANCH = 1;
     localparam integer SYS_LI     = 2;
     localparam integer SYS_IO     = 3;
+    localparam integer SYS_STEP   = 4;
 
     logic clk   = 1'b0;
     logic rst_n = 1'b0;
@@ -90,18 +91,20 @@ module tb_scpu;
     logic [7:0] sw_branch = 8'h00;
     logic [7:0] sw_li     = 8'h00;
     logic [7:0] sw_io     = 8'hA5;
+    logic [7:0] sw_step   = 8'd10;
     logic [7:0] btn_sum    = 8'h00;
     logic [7:0] btn_branch = 8'h00;
     logic [7:0] btn_li     = 8'h00;
     logic [7:0] btn_io     = 8'h3C;
+    logic [7:0] btn_step   = 8'h00;
 
-    logic [7:0] pc_sum, pc_branch, pc_li, pc_io;
-    logic       led_wen_sum, led_wen_branch, led_wen_li, led_wen_io;
-    logic       seg_wen_sum, seg_wen_branch, seg_wen_li, seg_wen_io;
-    logic [7:0] led_wdata_sum, led_wdata_branch, led_wdata_li, led_wdata_io;
-    logic [7:0] seg_wdata_sum, seg_wdata_branch, seg_wdata_li, seg_wdata_io;
-    logic [7:0] led_sum, led_branch, led_li, led_io;
-    logic [7:0] seg_sum, seg_branch, seg_li, seg_io;
+    logic [7:0] pc_sum, pc_branch, pc_li, pc_io, pc_step;
+    logic       led_wen_sum, led_wen_branch, led_wen_li, led_wen_io, led_wen_step;
+    logic       seg_wen_sum, seg_wen_branch, seg_wen_li, seg_wen_io, seg_wen_step;
+    logic [7:0] led_wdata_sum, led_wdata_branch, led_wdata_li, led_wdata_io, led_wdata_step;
+    logic [7:0] seg_wdata_sum, seg_wdata_branch, seg_wdata_li, seg_wdata_io, seg_wdata_step;
+    logic [7:0] led_sum, led_branch, led_li, led_io, led_step;
+    logic [7:0] seg_sum, seg_branch, seg_li, seg_io, seg_step;
 
     integer checks = 0;
 
@@ -161,6 +164,20 @@ module tb_scpu;
         .seven_seg       (seg_io)
     );
 
+    scpu_sys #(.INIT_FILE("step_sum.hex")) u_step (
+        .clk             (clk),
+        .rst_n           (rst_n),
+        .switches        (sw_step),
+        .buttons         (btn_step),
+        .pc              (pc_step),
+        .led_wen         (led_wen_step),
+        .led_wdata       (led_wdata_step),
+        .seven_seg_wen   (seg_wen_step),
+        .seven_seg_wdata (seg_wdata_step),
+        .led             (led_step),
+        .seven_seg       (seg_step)
+    );
+
     always #5 clk = ~clk;
 
     function automatic logic [7:0] get_pc(input integer sys);
@@ -169,6 +186,7 @@ module tb_scpu;
             SYS_BRANCH: get_pc = pc_branch;
             SYS_LI:     get_pc = pc_li;
             SYS_IO:     get_pc = pc_io;
+            SYS_STEP:   get_pc = pc_step;
             default:    get_pc = 8'hxx;
         endcase
     endfunction
@@ -179,6 +197,7 @@ module tb_scpu;
             SYS_BRANCH: get_reg = u_branch.dut.u_gpr.regs[idx];
             SYS_LI:     get_reg = u_li.dut.u_gpr.regs[idx];
             SYS_IO:     get_reg = u_io.dut.u_gpr.regs[idx];
+            SYS_STEP:   get_reg = u_step.dut.u_gpr.regs[idx];
             default:    get_reg = 8'hxx;
         endcase
     endfunction
@@ -189,6 +208,7 @@ module tb_scpu;
             SYS_BRANCH: get_led_wen = led_wen_branch;
             SYS_LI:     get_led_wen = led_wen_li;
             SYS_IO:     get_led_wen = led_wen_io;
+            SYS_STEP:   get_led_wen = led_wen_step;
             default:    get_led_wen = 1'bx;
         endcase
     endfunction
@@ -199,6 +219,7 @@ module tb_scpu;
             SYS_BRANCH: get_seg_wen = seg_wen_branch;
             SYS_LI:     get_seg_wen = seg_wen_li;
             SYS_IO:     get_seg_wen = seg_wen_io;
+            SYS_STEP:   get_seg_wen = seg_wen_step;
             default:    get_seg_wen = 1'bx;
         endcase
     endfunction
@@ -209,6 +230,7 @@ module tb_scpu;
             SYS_BRANCH: get_led_wdata = led_wdata_branch;
             SYS_LI:     get_led_wdata = led_wdata_li;
             SYS_IO:     get_led_wdata = led_wdata_io;
+            SYS_STEP:   get_led_wdata = led_wdata_step;
             default:    get_led_wdata = 8'hxx;
         endcase
     endfunction
@@ -219,6 +241,7 @@ module tb_scpu;
             SYS_BRANCH: get_seg_wdata = seg_wdata_branch;
             SYS_LI:     get_seg_wdata = seg_wdata_li;
             SYS_IO:     get_seg_wdata = seg_wdata_io;
+            SYS_STEP:   get_seg_wdata = seg_wdata_step;
             default:    get_seg_wdata = 8'hxx;
         endcase
     endfunction
@@ -229,6 +252,7 @@ module tb_scpu;
             SYS_BRANCH: get_io_rdata = u_branch.dut.io_rdata;
             SYS_LI:     get_io_rdata = u_li.dut.io_rdata;
             SYS_IO:     get_io_rdata = u_io.dut.io_rdata;
+            SYS_STEP:   get_io_rdata = u_step.dut.io_rdata;
             default:    get_io_rdata = 8'hxx;
         endcase
     endfunction
@@ -239,6 +263,7 @@ module tb_scpu;
             SYS_BRANCH: get_led = led_branch;
             SYS_LI:     get_led = led_li;
             SYS_IO:     get_led = led_io;
+            SYS_STEP:   get_led = led_step;
             default:    get_led = 8'hxx;
         endcase
     endfunction
@@ -249,6 +274,7 @@ module tb_scpu;
             SYS_BRANCH: get_seg = seg_branch;
             SYS_LI:     get_seg = seg_li;
             SYS_IO:     get_seg = seg_io;
+            SYS_STEP:   get_seg = seg_step;
             default:    get_seg = 8'hxx;
         endcase
     endfunction
@@ -364,7 +390,7 @@ module tb_scpu;
         rst_n = 1'b0;
         repeat (2) @(posedge clk);
         #1;
-        for (s = SYS_SUM; s <= SYS_IO; s = s + 1) begin
+        for (s = SYS_SUM; s <= SYS_STEP; s = s + 1) begin
             if (get_pc(s) !== 8'd0) begin
                 $fatal(1, "FAIL: %s: sys%0d pc=%0d expected=0", tag, s, get_pc(s));
             end
@@ -612,6 +638,101 @@ module tb_scpu;
                  get_led(SYS_IO), get_seg(SYS_IO));
     endtask
 
+    task automatic step_once(input integer e_i, input integer e_sum);
+        integer hold_cycle;
+        integer prev_i;
+        integer prev_sum;
+
+        prev_i   = e_i - 1;
+        prev_sum = (e_i - 1) * e_i / 2;
+
+        tick(SYS_STEP, 8'd6, "step li R0,1 before press polling");
+        check_io_in(SYS_STEP, 8'h00, "step wait with button released");
+        tick(SYS_STEP, 8'd7, "step sample released button");
+        tick(SYS_STEP, 8'd6, "step keep waiting for button=1");
+        check_reg(SYS_STEP, 2'd1, prev_i[7:0], "step waiting preserves i");
+        check_reg(SYS_STEP, 2'd2, prev_sum[7:0], "step waiting preserves sum");
+
+        @(negedge clk);
+        btn_step = 8'h01;
+        #1;
+        check_io_in(SYS_STEP, 8'h01, "step sample button press");
+        tick(SYS_STEP, 8'd7, "step button press sampled");
+        tick(SYS_STEP, 8'd8, "step button press detected");
+        check_no_io(SYS_STEP, "step branch after button press");
+        tick(SYS_STEP, 8'd9, "step enter release polling");
+        tick(SYS_STEP, 8'd10, "step li R0,0 before release polling");
+
+        for (hold_cycle = 0; hold_cycle < 3; hold_cycle = hold_cycle + 1) begin
+            check_io_in(SYS_STEP, 8'h01, "step held button remains 1");
+            tick(SYS_STEP, 8'd11, "step held button sampled");
+            tick(SYS_STEP, 8'd9, "step held button repeats release polling");
+            tick(SYS_STEP, 8'd10, "step release polling restarts");
+            check_reg(SYS_STEP, 2'd1, prev_i[7:0], "step long press preserves i");
+            check_reg(SYS_STEP, 2'd2, prev_sum[7:0], "step long press preserves sum");
+            if (get_led(SYS_STEP) !== prev_sum[7:0]) begin
+                $fatal(1, "FAIL: long press changed LED: %0d expected=%0d",
+                       get_led(SYS_STEP), prev_sum);
+            end
+            checks = checks + 1;
+        end
+
+        @(negedge clk);
+        btn_step = 8'h00;
+        #1;
+        check_io_in(SYS_STEP, 8'h00, "step sample button release");
+        tick(SYS_STEP, 8'd11, "step button release sampled");
+        tick(SYS_STEP, 8'd12, "step button release detected");
+        tick(SYS_STEP, 8'd13, "step restore N from switches");
+        tick(SYS_STEP, 8'd14, "step restore constant 1");
+        tick(SYS_STEP, 8'd15, "step increment i once");
+        check_reg(SYS_STEP, 2'd1, e_i[7:0], "step i incremented once");
+        tick(SYS_STEP, 8'd16, "step add current i to sum once");
+        check_reg(SYS_STEP, 2'd2, e_sum[7:0], "step sum updated once");
+
+        if (e_i < 10) begin
+            tick(SYS_STEP, 8'd8, "step branch to loop trampoline");
+            tick(SYS_STEP, 8'd4, "step return to LED output");
+            check_led_out(SYS_STEP, e_sum[7:0], "step output updated sum to LED");
+            tick(SYS_STEP, 8'd5, "step LED updated for next wait");
+            check_state(SYS_STEP, "step completed one press-release", 8'd5,
+                        8'd10, e_i[7:0], e_sum[7:0], 8'd1, e_sum[7:0], 8'd0);
+        end else begin
+            tick(SYS_STEP, 8'd17, "step final count reached");
+            check_led_out(SYS_STEP, e_sum[7:0], "step output final sum to LED");
+            tick(SYS_STEP, 8'd18, "step final LED updated");
+            check_state(SYS_STEP, "step final state", 8'd18,
+                        8'd10, 8'd10, 8'd55, 8'd1, 8'd55, 8'd0);
+        end
+    endtask
+
+    task automatic run_step;
+        integer k;
+
+        tick(SYS_STEP, 8'd1, "step init N=switches");
+        tick(SYS_STEP, 8'd2, "step init i=0");
+        tick(SYS_STEP, 8'd3, "step init sum=0");
+        tick(SYS_STEP, 8'd4, "step init constant=1");
+        check_led_out(SYS_STEP, 8'd0, "step initial LED output 0");
+        tick(SYS_STEP, 8'd5, "step initial LED is 0");
+        check_state(SYS_STEP, "step initial state", 8'd5,
+                    8'd10, 8'd0, 8'd0, 8'd1, 8'd0, 8'd0);
+
+        for (k = 1; k <= 10; k = k + 1) begin
+            step_once(k, k * (k + 1) / 2);
+        end
+
+        repeat (3) begin
+            tick(SYS_STEP, 8'd18, "step final self-loop");
+            check_state(SYS_STEP, "step final state holds", 8'd18,
+                        8'd10, 8'd10, 8'd55, 8'd1, 8'd55, 8'd0);
+        end
+
+        $display("INFO: step_sum done: pc=%0d i=%0d sum=%0d led=%0d, 10 press-release cycles",
+                 get_pc(SYS_STEP), get_reg(SYS_STEP, 2'd1),
+                 get_reg(SYS_STEP, 2'd2), get_led(SYS_STEP));
+    endtask
+
     initial begin
         // $dumpfile("tb_scpu.vcd");
         // $dumpvars(0, tb_scpu);
@@ -632,6 +753,13 @@ module tb_scpu;
         check_rom_encoding(u_io.u_rom.mem[2],   8'h51, "io_test.hex[2] io in idx1");
         check_rom_encoding(u_io.u_rom.mem[3],   8'h62, "io_test.hex[3] io in idx2");
         check_rom_encoding(u_io.u_rom.mem[5],   8'h59, "io_test.hex[5] io out idx1");
+        check_rom_encoding(u_step.u_rom.mem[4], 8'h68, "step_sum.hex[4] io out sum to LED");
+        check_rom_encoding(u_step.u_rom.mem[7], 8'hff, "step_sum.hex[7] wait for press");
+        check_rom_encoding(u_step.u_rom.mem[8], 8'hf3, "step_sum.hex[8] loop trampoline");
+        check_rom_encoding(u_step.u_rom.mem[11], 8'hfb, "step_sum.hex[11] wait for release");
+        check_rom_encoding(u_step.u_rom.mem[16], 8'he1, "step_sum.hex[16] loop or finish");
+        check_rom_encoding(u_step.u_rom.mem[17], 8'h68, "step_sum.hex[17] output final sum");
+        check_rom_encoding(u_step.u_rom.mem[18], 8'hc3, "step_sum.hex[18] final self-loop");
 
         @(negedge clk);
         rst_n = 1'b1;
@@ -663,7 +791,13 @@ module tb_scpu;
         #1;
         run_io();
 
-        $display("PASS: tb_scpu completed %0d checks (sum_io, branch, li, io)", checks);
+        apply_reset("reset before step_sum");
+        @(negedge clk);
+        rst_n = 1'b1;
+        #1;
+        run_step();
+
+        $display("PASS: tb_scpu completed %0d checks (sum_io, branch, li, io, step_sum)", checks);
         $finish;
     end
 
