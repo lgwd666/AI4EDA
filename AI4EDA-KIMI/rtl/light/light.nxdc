@@ -1,0 +1,6 @@
+top=light
+
+# NVBoard 引脚约束：流水灯
+# 向量信号按 MSB -> LSB 的顺序列出引脚：
+#   led[15] -> LD15, led[14] -> LD14, ..., led[0] -> LD0
+led (LD15, LD14, LD13, LD12, LD11, LD10, LD9, LD8, LD7, LD6, LD5, LD4, LD3, LD2, LD1, LD0)
