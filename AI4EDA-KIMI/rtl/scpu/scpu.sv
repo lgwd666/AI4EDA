@@ -35,17 +35,15 @@ module scpu (
     assign next_pc = is_bner0 && (rdata1 != rdata2)
                    ? {4'b0000, instr[5:2]} : pc + 8'd1;
 
-    genvar pc_bit;
-    generate
-        for (pc_bit = 0; pc_bit < 8; pc_bit = pc_bit + 1) begin : gen_pc_dff
-            dff_pn u_dff_pn (
-                .clk   (clk),
-                .rst_n (rst_n),
-                .d     (next_pc[pc_bit]),
-                .q     (pc[pc_bit])
-            );
-        end
-    endgenerate
+    dff_pn #(
+        .WIDTH       (8),
+        .RESET_VALUE (8'h00)
+    ) u_pc_dff (
+        .clk   (clk),
+        .rst_n (rst_n),
+        .d     (next_pc),
+        .q     (pc)
+    );
 
     scpu_gpr u_gpr (
         .clk    (clk),
@@ -77,7 +75,6 @@ module scpu_gpr (
     assign rdata2 = regs[raddr2];
 
     genvar reg_idx;
-    genvar bit_idx;
     generate
         for (reg_idx = 0; reg_idx < 4; reg_idx = reg_idx + 1) begin : gen_gpr
             localparam logic [1:0] REG_ADDR = reg_idx;
@@ -85,14 +82,15 @@ module scpu_gpr (
 
             assign d = wen && (waddr == REG_ADDR) ? wdata : regs[reg_idx];
 
-            for (bit_idx = 0; bit_idx < 8; bit_idx = bit_idx + 1) begin : gen_dff
-                dff_pn u_dff_pn (
-                    .clk   (clk),
-                    .rst_n (rst_n),
-                    .d     (d[bit_idx]),
-                    .q     (regs[reg_idx][bit_idx])
-                );
-            end
+            dff_pn #(
+                .WIDTH       (8),
+                .RESET_VALUE (8'h00)
+            ) u_dff_pn (
+                .clk   (clk),
+                .rst_n (rst_n),
+                .d     (d),
+                .q     (regs[reg_idx])
+            );
         end
     endgenerate
 endmodule
