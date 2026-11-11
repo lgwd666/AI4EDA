@@ -8,11 +8,11 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `light.v` | 被测 RTL；`CNT_MAX` 默认 5000000，用于 NVBoard 观察 |
-| `light_fast.v` | 包装模块，把 `CNT_MAX` 改成 4，供快速仿真 |
-| `light_main.cpp` | Verilator 驱动：时钟/复位、C++ 参考模型逐周期比对、可选 FST 波形 |
-| `nvboard_light.cpp` | NVBoard 驱动：软件产生时钟，`led[15:0]` 显示到 LD15..LD0 |
-| `light.nxdc` | NVBoard 引脚约束 |
+| `vsrc/light.v` | 被测 RTL；`CNT_MAX` 默认 5000000，用于 NVBoard 观察 |
+| `vsrc/light_fast.v` | 包装模块，把 `CNT_MAX` 改成 4，供快速仿真 |
+| `csrc/light_main.cpp` | Verilator 驱动：时钟/复位、C++ 参考模型逐周期比对、可选 FST 波形 |
+| `csrc/nvboard_light.cpp` | NVBoard 驱动：软件产生时钟，`led[15:0]` 显示到 LD15..LD0 |
+| `constr/light.nxdc` | NVBoard 引脚约束 |
 | `tb_light.v` | Icarus 自检 testbench，含参考模型、超时保护和 VCD 开关 |
 | `Makefile` | `sim` / `wave` / `icarus` / `lint` / `nvboard` / `clean` |
 

@@ -1,0 +1,8 @@
+top=top
+
+# NVBoard 引脚约束：双控开关
+# 信号名与 top.v 的端口名一致：
+#   a、b 接两个拨码开关，f 接一个 LED
+a SW0
+b SW1
+f LD0

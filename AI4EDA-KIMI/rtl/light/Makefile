@@ -9,13 +9,18 @@
 #   make nvboard    接入 NVBoard（light，CNT_MAX=5000000）
 #   make clean      清理 build/
 #
-# 说明：
-#   light.v      被测 RTL，CNT_MAX 默认 5000000，用于 NVBoard 观察
-#   light_fast.v 把 CNT_MAX 改成 4 的包装，供快速仿真使用
+# 目录结构与 npc 框架一致：
+#   vsrc/    RTL 源文件
+#   csrc/    C++ 仿真驱动
+#   constr/  NVBoard 引脚约束
+#   build/   生成物
+#
+#   vsrc/light.v      被测 RTL，CNT_MAX 默认 5000000，用于 NVBoard 观察
+#   vsrc/light_fast.v 把 CNT_MAX 改成 4 的包装，供快速仿真使用
 # ============================================================================
 
 TOP      ?= light_fast
-CSRC     ?= light_main.cpp
+CSRC     ?= csrc/light_main.cpp
 WAVE     ?= 0
 
 BUILD    := build
@@ -24,7 +29,7 @@ OBJ_DIR  := $(BUILD)/obj_$(TOP)$(SUFFIX)
 BIN      := $(BUILD)/$(TOP)$(SUFFIX)
 
 VERILATOR ?= verilator
-VSRCS     := light.v light_fast.v
+VSRCS     := vsrc/light.v vsrc/light_fast.v
 CXXFLAGS  ?= -O2
 
 VERILATOR_FLAGS := --cc --exe --build --top-module $(TOP) \
@@ -55,7 +60,7 @@ wave:
 
 # ---- Icarus Verilog 自检 ---------------------------------------------------
 # tb_light.v 中的 $dumpfile/$dumpvars 默认注释；生成 VCD 时解注释后重新运行
-$(BUILD)/tb_light: tb_light.v light.v light_fast.v
+$(BUILD)/tb_light: tb_light.v $(VSRCS)
 	@mkdir -p $(BUILD)
 	iverilog -g2012 -Wall -o $@ $^
 
@@ -76,20 +81,21 @@ ifneq ($(NVBOARD_HOME),)
 include $(NVBOARD_HOME)/scripts/nvboard.mk
 endif
 
+NVBOARD_CSRC ?= csrc/nvboard_light.cpp
 NVBOARD_BIN  := $(BUILD)/light_nvboard
 NVBOARD_OBJ  := $(BUILD)/obj_nvboard_light
 NVBOARD_AUTO := $(BUILD)/auto_bind_light.cpp
 
-$(NVBOARD_AUTO): light.nxdc
+$(NVBOARD_AUTO): constr/light.nxdc
 	@mkdir -p $(BUILD)
 	python3 $(NVBOARD_HOME)/scripts/auto_pin_bind.py $< $@
 
-$(NVBOARD_BIN): $(VSRCS) nvboard_light.cpp $(NVBOARD_AUTO) $(NVBOARD_ARCHIVE)
+$(NVBOARD_BIN): $(VSRCS) $(NVBOARD_CSRC) $(NVBOARD_AUTO) $(NVBOARD_ARCHIVE)
 	@mkdir -p $(BUILD)
 	$(VERILATOR) --cc --exe --build --top-module light \
 	  -Mdir $(NVBOARD_OBJ) -o $(abspath $(NVBOARD_BIN)) \
 	  -Wall -Wno-fatal --x-assign fast --x-initial fast \
-	  $(VSRCS) nvboard_light.cpp $(NVBOARD_AUTO) $(NVBOARD_ARCHIVE) \
+	  $(VSRCS) $(NVBOARD_CSRC) $(NVBOARD_AUTO) $(NVBOARD_ARCHIVE) \
 	  -CFLAGS "$(CXXFLAGS)" \
 	  -CFLAGS "-I$(abspath $(NVBOARD_OBJ))" \
 	  -CFLAGS "-I$(NVBOARD_HOME)/usr/include" \
@@ -99,6 +105,9 @@ nvboard:
 	@test -n "$(NVBOARD_HOME)" || { \
 	  echo "错误：NVBOARD_HOME 未设置，请先运行 bash init.sh nvboard 并重新登录"; \
 	  exit 1; \
+	}
+	@test -f "$(NVBOARD_CSRC)" || { \
+	  echo "错误：找不到 NVBoard 驱动 $(NVBOARD_CSRC)"; exit 1; \
 	}
 	@$(MAKE) --no-print-directory run-nvboard
 
