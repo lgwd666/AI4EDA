@@ -1,4 +1,6 @@
-module scpu (
+module scpu #(
+    parameter STEP_MODE = 0
+) (
     input  logic       clk,
     input  logic       rst_n,
     input  logic [7:0] instr,
@@ -33,6 +35,10 @@ module scpu (
     logic [7:0] branch_offset;
     logic [7:0] pc_step;
     logic [7:0] next_pc;
+    logic [7:0] buttons_d;
+    logic       button_rise;
+    logic       wait_button;
+    logic       pc_wen;
 
     assign is_add   = instr[7:6] == OP_ADD;
     assign is_io    = instr[7:6] == OP_IO;
@@ -66,6 +72,10 @@ module scpu (
     assign seven_seg_wen  = rst_n && is_io && io_dir && instr[2:0] == 3'd1;
     assign seven_seg_wdata = rdata1;
 
+    assign button_rise = |(buttons & ~buttons_d);
+    assign wait_button = STEP_MODE && is_io && !io_dir && instr[2:0] == 3'd1;
+    assign pc_wen      = !wait_button || button_rise;
+
     assign branch_offset = {{4{instr[5]}}, instr[5:2]};
     assign pc_step = is_bner0 && (rdata1 != rdata2) ? branch_offset : 8'd1;
     assign next_pc = pc + pc_step;
@@ -76,8 +86,18 @@ module scpu (
     ) u_pc_dff (
         .clk   (clk),
         .rst_n (rst_n),
-        .d     (next_pc),
+        .d     (pc_wen ? next_pc : pc),
         .q     (pc)
+    );
+
+    dff_pn #(
+        .WIDTH       (8),
+        .RESET_VALUE (8'h00)
+    ) u_buttons_dff (
+        .clk   (clk),
+        .rst_n (rst_n),
+        .d     (buttons),
+        .q     (buttons_d)
     );
 
     scpu_gpr u_gpr (

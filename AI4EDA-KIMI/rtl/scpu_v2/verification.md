@@ -24,7 +24,7 @@
 5. `li` 的四种 `s`（移位 0/2/4/6）结果正确，特别验证 `li r0,192` 的编码 `0x8f`。
 6. `bner0` 的正偏移、负偏移和条件不成立行为正确，偏移相对当前 PC。
 7. 输出设备在源 GPR 改变后保持；输入指令、非 `io` 指令和复位期间两个输出写使能均为 0。
-8. `step_sum.hex` 只在按钮完成一次“按下并释放”后累加一项，长按不累加，累加结果只输出到 LED。
+8. `step_sum.hex` 只在按钮上升沿到来后累加一项，无上升沿、长按和下降沿均不累加，累加结果只输出到 LED。
 9. testbench 具备 ROM 编码自检、超时保护和失败非零退出。
 
 ## 3. 文件与职责
@@ -37,7 +37,7 @@
 | `li_test.hex` | `li` 四种移位及 `li r0,192` |
 | `branch_test.hex` | `bner0` 正/负偏移、条件不成立和自循环 |
 | `io_test.hex` | 按钮输入、未定义输入编号、独立输出及输出保持 |
-| `step_sum.hex` | 按下并释放一次累加一项，结果输出到 LED |
+| `step_sum.hex` | 每个按钮上升沿累加一项，结果输出到 LED |
 | `tb_scpu.sv` | 五套测试系统、设备保持寄存器、逐拍自检、超时与 VCD 开关 |
 
 testbench 同时例化五套 `scpu_sys`（ROM + `scpu` + 输出设备模型），共享 `clk/rst_n`，按场景复位后分时运行。层次路径 `u_sum.dut.u_gpr.regs[0..3]`（以及其他系统对应路径）用于观察 GPR；内部 `io_rdata` 仅用于检查输入选择结果。
@@ -89,29 +89,21 @@ testbench 同时例化五套 `scpu_sys`（ROM + `scpu` + 输出设备模型）�
 
 ### 4.5 `step_sum.hex`
 
-该程序固定以 `switches=10` 为末项，LED 初始显示 0。每次检测到 `buttons=1` 后，还必须等待按钮回到 0，才执行一次 `i++` 和 `sum+=i`。第 1 次至第 10 次按下并释放后，LED 依次为 `1,3,6,10,15,21,28,36,45,55`。
+该程序固定以 `switches=10` 为末项，LED 初始显示 0。`u_step` 启用 `STEP_MODE=1`，CPU 用 `buttons_d` 保存上一拍按钮状态，并计算 `button_rise = |(buttons & ~buttons_d)`。PC5 是按钮输入指令，也是等待点：没有上升沿时保持 PC，只有检测到上升沿才进入后续求和指令。第 1 次至第 10 次上升沿后，LED 依次为 `1,3,6,10,15,21,28,36,45,55`。
 
 | PC | 指令 | 语义 |
 | --- | --- | --- |
 | 0 | `40` | R0←switches，读末项 N=10 |
 | 1~3 | `90 a0 b1` | 初始化 `i=0`、`sum=0`、R3=1 |
 | 4 | `68` | 将当前 sum 输出到 LED |
-| 5 | `81` | R0=1，作为按钮按下的比较值 |
-| 6 | `71` | R3←buttons |
-| 7 | `ff` | 按钮不为 1 时跳回 PC6，持续等待按下 |
-| 8 | `f3` | 按下后 R0=R3=1，顺序进入释放轮询；循环返回时 R0=10、R3=1，跳回 PC4 |
-| 9 | `80` | R0=0，作为按钮释放的比较值 |
-| 10 | `71` | R3←buttons |
-| 11 | `fb` | 按钮仍非 0 时跳回 PC9，持续等待释放 |
-| 12 | `40` | 重新读入 N=10 |
-| 13 | `b1` | 恢复常数 R3=1 |
-| 14 | `17` | `i++` |
-| 15 | `29` | `sum+=i` |
-| 16 | `e1` | 尚未到第 10 项时跳回 PC8，再由 PC8 返回 PC4 |
-| 17 | `68` | 将最终 sum=55 输出到 LED |
-| 18 | `c3` | 完成后自循环 |
+| 5 | `71` | R3←buttons；等待点仅在按钮上升沿到来时离开 |
+| 6 | `17` | `i++` |
+| 7 | `29` | `sum+=i` |
+| 8 | `f1` | 尚未到第 10 项时跳回 PC4，继续显示并等待下一沿 |
+| 9 | `68` | 将最终 sum=55 输出到 LED |
+| 10 | `c3` | 完成后自循环 |
 
-寄存器复用关系：R1 始终保存 `i`，R2 始终保存 `sum`；R0 在 N、1、0 之间切换，R3 在常数 1 与按钮采样值之间切换。PC8 同时承担按下后的顺序出口和循环跳转入口，使所有分支偏移都处于 `-8~+7` 范围内。
+R0 保存 N=10，R1 保存 `i`，R2 保存 `sum`；R3 初始化为常数 1，在 PC5 被按钮采样值覆盖，本程序使用 `buttons=1` 产生上升沿，因此下一拍 PC6 仍按 1 递增。`STEP_MODE` 只控制按钮等待指令处的 PC，不会把整颗 CPU 变成每条指令都需要按钮驱动；其余四套系统保持默认 `STEP_MODE=0`。该边沿方案以仿真和同步数字输入为对象，实际板级按键仍需额外消抖与同步。
 
 ## 5. 测试场景与通过标准
 
@@ -122,11 +114,11 @@ testbench 同时例化五套 `scpu_sys`（ROM + `scpu` + 输出设备模型）�
 - `li` 每拍检查 PC 和目标 GPR，覆盖四种移位。
 - `branch` 检查完整 PC 轨迹及 GPR，确认应跳过的指令没有执行。
 - `io` 检查独立输入数据、未定义编号读 0、两个写使能互斥、写数据及设备保持。
-- `step_sum` 完整执行 10 次按下—保持—释放；每次长按三个轮询周期，检查 `i`、`sum` 和 LED 不变，释放后只累加一次；最终 PC18 自循环且 LED=55。
+- `step_sum` 完整执行 10 次上升沿；每次先等待三拍，确认无上升沿时 PC5、`i`、`sum` 和 LED 均不变；上升沿后只累加一次，再验证长按三拍和下降沿不推进 PC；最终 PC10 自循环且 LED=55。
 - ROM 编码自检覆盖关键指令，防止 hex 文件写错后测试了其他程序。
 - 独立超时块在 `MAX_SIM_NS=10000` 后失败退出。
 
-通过标准：打印 `PASS: tb_scpu completed 583 checks (sum_io, branch, li, io, step_sum)`，`vvp` 返回 0，且上述最终状态全部成立。
+通过标准：打印 `PASS: tb_scpu completed 483 checks (sum_io, branch, li, io, step_sum)`，`vvp` 返回 0，且上述最终状态全部成立。
 
 ## 6. 实际命令与结果
 
@@ -148,8 +140,8 @@ INFO: sum_io done: pc=9 R0=10 R1=10 R2=55 R3=1 led=55 seg=55
 INFO: branch_test done: pc=11 R0=3 R1=3 R2=4 R3=3
 INFO: li_test done: pc=8 R0=64 R1=12 R2=128 R3=3
 INFO: io_test done: pc=10 R0=0 R1=1 R2=0 R3=1 led=c0 seg=01
-INFO: step_sum done: pc=18 i=10 sum=55 led=55, 10 press-release cycles
-PASS: tb_scpu completed 583 checks (sum_io, branch, li, io, step_sum)
+INFO: step_sum done: pc=10 i=10 sum=55 led=55, 10 rising edges
+PASS: tb_scpu completed 483 checks (sum_io, branch, li, io, step_sum)
 ```
 
 - Icarus 仿真返回 0；短 hex 文件的 `$readmemh ... Not enough words` 提示为预期现象，ROM 其余地址已由初始化循环填 0。
@@ -179,9 +171,10 @@ PASS: tb_scpu completed 583 checks (sum_io, branch, li, io, step_sum)
 | `u_io.led` / `u_io.seven_seg` | PC4/PC5 后均为 `0x3C`；PC7 后 LED 为 `0xC0`；PC9 后数码管为 `0x01` |
 | `u_li.pc` | `1..8,8...`；R0 第 1 拍为 192，第 5 拍变为 64 |
 | `u_branch.pc` | `4→2`、`6→8`、`9→10`，最后在 PC11 自循环 |
-| `u_step.pc` | 等待按下时在 PC6/7 往返；长按时在 PC9/10/11 往返；释放后依次执行 PC12~16 |
-| `u_step.dut.u_gpr.regs[1]` / `regs[2]` | 只在释放后分别更新 `i` 和 `sum`，等待与长按期间保持 |
-| `u_step.led_wen` / `u_step.led` | 初始输出 0；每次循环在 PC4 输出新和；最终 PC17 输出 55 |
+| `u_step.pc` | 无上升沿、长按和下降沿时保持 PC5；上升沿后依次经过 PC6~8，未完成时回 PC4/5，最终进入 PC10 |
+| `u_step.dut.buttons_d` / `button_rise` | 前者保存上一拍按钮值；只有当前拍出现 0→1 时后者为 1 |
+| `u_step.dut.u_gpr.regs[1]` / `regs[2]` | 上升沿后分别更新 `i` 和 `sum`，等待、长按与下降沿期间保持 |
+| `u_step.led_wen` / `u_step.led` | 初始输出 0；每次循环在 PC4 输出新和；最终 PC9 输出 55 |
 | `u_step.seven_seg_wen` / `u_step.seven_seg` | 写使能始终为 0，数码管保持 0 |
 | 各 `u_*.led` / `u_*.seven_seg` | 复位时为 0，仅在对应写使能有效的上升沿变化 |
 

@@ -27,7 +27,8 @@ module scpu_io_dev (
 endmodule
 
 module scpu_sys #(
-    parameter INIT_FILE = ""
+    parameter INIT_FILE = "",
+    parameter STEP_MODE = 0
 ) (
     input  logic       clk,
     input  logic       rst_n,
@@ -50,7 +51,9 @@ module scpu_sys #(
         .rdata (instr)
     );
 
-    scpu dut (
+    scpu #(
+        .STEP_MODE (STEP_MODE)
+    ) dut (
         .clk             (clk),
         .rst_n           (rst_n),
         .instr           (instr),
@@ -164,7 +167,10 @@ module tb_scpu;
         .seven_seg       (seg_io)
     );
 
-    scpu_sys #(.INIT_FILE("step_sum.hex")) u_step (
+    scpu_sys #(
+        .INIT_FILE ("step_sum.hex"),
+        .STEP_MODE (1)
+    ) u_step (
         .clk             (clk),
         .rst_n           (rst_n),
         .switches        (sw_step),
@@ -639,70 +645,70 @@ module tb_scpu;
     endtask
 
     task automatic step_once(input integer e_i, input integer e_sum);
-        integer hold_cycle;
+        integer wait_cycle;
         integer prev_i;
         integer prev_sum;
 
         prev_i   = e_i - 1;
         prev_sum = (e_i - 1) * e_i / 2;
 
-        tick(SYS_STEP, 8'd6, "step li R0,1 before press polling");
-        check_io_in(SYS_STEP, 8'h00, "step wait with button released");
-        tick(SYS_STEP, 8'd7, "step sample released button");
-        tick(SYS_STEP, 8'd6, "step keep waiting for button=1");
-        check_reg(SYS_STEP, 2'd1, prev_i[7:0], "step waiting preserves i");
-        check_reg(SYS_STEP, 2'd2, prev_sum[7:0], "step waiting preserves sum");
-
-        @(negedge clk);
-        btn_step = 8'h01;
-        #1;
-        check_io_in(SYS_STEP, 8'h01, "step sample button press");
-        tick(SYS_STEP, 8'd7, "step button press sampled");
-        tick(SYS_STEP, 8'd8, "step button press detected");
-        check_no_io(SYS_STEP, "step branch after button press");
-        tick(SYS_STEP, 8'd9, "step enter release polling");
-        tick(SYS_STEP, 8'd10, "step li R0,0 before release polling");
-
-        for (hold_cycle = 0; hold_cycle < 3; hold_cycle = hold_cycle + 1) begin
-            check_io_in(SYS_STEP, 8'h01, "step held button remains 1");
-            tick(SYS_STEP, 8'd11, "step held button sampled");
-            tick(SYS_STEP, 8'd9, "step held button repeats release polling");
-            tick(SYS_STEP, 8'd10, "step release polling restarts");
-            check_reg(SYS_STEP, 2'd1, prev_i[7:0], "step long press preserves i");
-            check_reg(SYS_STEP, 2'd2, prev_sum[7:0], "step long press preserves sum");
+        for (wait_cycle = 0; wait_cycle < 3; wait_cycle = wait_cycle + 1) begin
+            check_io_in(SYS_STEP, 8'h00, "step PC5 waits without rising edge");
+            tick(SYS_STEP, 8'd5, "step PC holds without rising edge");
+            check_reg(SYS_STEP, 2'd1, prev_i[7:0], "step waiting preserves i");
+            check_reg(SYS_STEP, 2'd2, prev_sum[7:0], "step waiting preserves sum");
             if (get_led(SYS_STEP) !== prev_sum[7:0]) begin
-                $fatal(1, "FAIL: long press changed LED: %0d expected=%0d",
+                $fatal(1, "FAIL: waiting without edge changed LED: %0d expected=%0d",
                        get_led(SYS_STEP), prev_sum);
             end
             checks = checks + 1;
         end
 
         @(negedge clk);
-        btn_step = 8'h00;
+        btn_step = 8'h01;
         #1;
-        check_io_in(SYS_STEP, 8'h00, "step sample button release");
-        tick(SYS_STEP, 8'd11, "step button release sampled");
-        tick(SYS_STEP, 8'd12, "step button release detected");
-        tick(SYS_STEP, 8'd13, "step restore N from switches");
-        tick(SYS_STEP, 8'd14, "step restore constant 1");
-        tick(SYS_STEP, 8'd15, "step increment i once");
+        check_io_in(SYS_STEP, 8'h01, "step rising edge presented at PC5");
+        tick(SYS_STEP, 8'd6, "step rising edge advances PC");
+        check_reg(SYS_STEP, 2'd1, prev_i[7:0], "step edge itself does not increment i");
+        check_reg(SYS_STEP, 2'd2, prev_sum[7:0], "step edge itself does not update sum");
+
+        tick(SYS_STEP, 8'd7, "step increment i once after edge");
         check_reg(SYS_STEP, 2'd1, e_i[7:0], "step i incremented once");
-        tick(SYS_STEP, 8'd16, "step add current i to sum once");
+        tick(SYS_STEP, 8'd8, "step add current i to sum once");
         check_reg(SYS_STEP, 2'd2, e_sum[7:0], "step sum updated once");
 
         if (e_i < 10) begin
-            tick(SYS_STEP, 8'd8, "step branch to loop trampoline");
             tick(SYS_STEP, 8'd4, "step return to LED output");
             check_led_out(SYS_STEP, e_sum[7:0], "step output updated sum to LED");
-            tick(SYS_STEP, 8'd5, "step LED updated for next wait");
-            check_state(SYS_STEP, "step completed one press-release", 8'd5,
+            tick(SYS_STEP, 8'd5, "step LED updated for next edge wait");
+            check_state(SYS_STEP, "step completed one rising edge", 8'd5,
                         8'd10, e_i[7:0], e_sum[7:0], 8'd1, e_sum[7:0], 8'd0);
+
+            for (wait_cycle = 0; wait_cycle < 3; wait_cycle = wait_cycle + 1) begin
+                check_io_in(SYS_STEP, 8'h01, "step held button has no new rising edge");
+                tick(SYS_STEP, 8'd5, "step held button keeps PC at 5");
+                check_reg(SYS_STEP, 2'd1, e_i[7:0], "step held button preserves i");
+                check_reg(SYS_STEP, 2'd2, e_sum[7:0], "step held button preserves sum");
+                if (get_led(SYS_STEP) !== e_sum[7:0]) begin
+                    $fatal(1, "FAIL: held button changed LED: %0d expected=%0d",
+                           get_led(SYS_STEP), e_sum);
+                end
+                checks = checks + 1;
+            end
+
+            @(negedge clk);
+            btn_step = 8'h00;
+            #1;
+            check_io_in(SYS_STEP, 8'h00, "step falling edge presented at PC5");
+            tick(SYS_STEP, 8'd5, "step falling edge does not advance PC");
         end else begin
-            tick(SYS_STEP, 8'd17, "step final count reached");
+            tick(SYS_STEP, 8'd9, "step final count reached");
             check_led_out(SYS_STEP, e_sum[7:0], "step output final sum to LED");
-            tick(SYS_STEP, 8'd18, "step final LED updated");
-            check_state(SYS_STEP, "step final state", 8'd18,
+            tick(SYS_STEP, 8'd10, "step final LED updated");
+            check_state(SYS_STEP, "step final state", 8'd10,
                         8'd10, 8'd10, 8'd55, 8'd1, 8'd55, 8'd0);
+            @(negedge clk);
+            btn_step = 8'h00;
         end
     endtask
 
@@ -723,12 +729,12 @@ module tb_scpu;
         end
 
         repeat (3) begin
-            tick(SYS_STEP, 8'd18, "step final self-loop");
-            check_state(SYS_STEP, "step final state holds", 8'd18,
+            tick(SYS_STEP, 8'd10, "step final self-loop");
+            check_state(SYS_STEP, "step final state holds", 8'd10,
                         8'd10, 8'd10, 8'd55, 8'd1, 8'd55, 8'd0);
         end
 
-        $display("INFO: step_sum done: pc=%0d i=%0d sum=%0d led=%0d, 10 press-release cycles",
+        $display("INFO: step_sum done: pc=%0d i=%0d sum=%0d led=%0d, 10 rising edges",
                  get_pc(SYS_STEP), get_reg(SYS_STEP, 2'd1),
                  get_reg(SYS_STEP, 2'd2), get_led(SYS_STEP));
     endtask
@@ -754,12 +760,12 @@ module tb_scpu;
         check_rom_encoding(u_io.u_rom.mem[3],   8'h62, "io_test.hex[3] io in idx2");
         check_rom_encoding(u_io.u_rom.mem[5],   8'h59, "io_test.hex[5] io out idx1");
         check_rom_encoding(u_step.u_rom.mem[4], 8'h68, "step_sum.hex[4] io out sum to LED");
-        check_rom_encoding(u_step.u_rom.mem[7], 8'hff, "step_sum.hex[7] wait for press");
-        check_rom_encoding(u_step.u_rom.mem[8], 8'hf3, "step_sum.hex[8] loop trampoline");
-        check_rom_encoding(u_step.u_rom.mem[11], 8'hfb, "step_sum.hex[11] wait for release");
-        check_rom_encoding(u_step.u_rom.mem[16], 8'he1, "step_sum.hex[16] loop or finish");
-        check_rom_encoding(u_step.u_rom.mem[17], 8'h68, "step_sum.hex[17] output final sum");
-        check_rom_encoding(u_step.u_rom.mem[18], 8'hc3, "step_sum.hex[18] final self-loop");
+        check_rom_encoding(u_step.u_rom.mem[5], 8'h71, "step_sum.hex[5] wait for rising edge");
+        check_rom_encoding(u_step.u_rom.mem[6], 8'h17, "step_sum.hex[6] increment i");
+        check_rom_encoding(u_step.u_rom.mem[7], 8'h29, "step_sum.hex[7] update sum");
+        check_rom_encoding(u_step.u_rom.mem[8], 8'hf1, "step_sum.hex[8] loop or finish");
+        check_rom_encoding(u_step.u_rom.mem[9], 8'h68, "step_sum.hex[9] output final sum");
+        check_rom_encoding(u_step.u_rom.mem[10], 8'hc3, "step_sum.hex[10] final self-loop");
 
         @(negedge clk);
         rst_n = 1'b1;
