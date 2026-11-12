@@ -189,4 +189,60 @@ PASS: tb_scpu completed 483 checks (sum_io, branch, li, io, step_sum)
 
 ## 9. 生成物清理
 
-验证后删除 `tb_scpu.vvp`、`tb_scpu.vcd`、日志和其他构建产物，不纳入提交；`$dumpfile/$dumpvars` 默认保持注释。
+验证后删除 `tb_scpu.vvp`、`tb_scpu.vcd`、日志和其他构建产物，不纳入提交。Icarus 波形由 `tb_scpu.sv` 中的 `$dumpfile/$dumpvars` 开关控制，当前已开启；Verilator 生成物统一通过 `make clean` 清理。
+
+
+## 10. sEMU 与 DiffTest
+
+### 10.1 文件与职责
+
+| 文件 | 作用 |
+| --- | --- |
+| `semu.h` / `semu.cpp` | sISA 指令集模拟器：256 字节程序存储器、8 位 PC、4 个 8 位 GPR 和输入设备状态 |
+| `semu_main.cpp` | 独立运行 `sum_io.hex` 40 条指令，并检查最终 PC 和 GPR |
+| `difftest_top.sv` | Verilator 测试封装：连接 ROM 与 sCPU、导出 PC/GPR，并提供指令故障注入入口 |
+| `difftest_main.cpp` | 每拍推进 DUT 和 REF 各一条指令，比较 PC 和全部 GPR，报告首次差异 |
+| `Makefile` | `semu`、`difftest`、`fault-gpr`、`fault-pc`、`test`、`lint` 和 `clean` 目标 |
+
+sEMU 与 RTL 使用同一个 `sum_io.hex`，实现 `add`、增强 `li`、`bner0` 和当前 `io` 语义：输入编号 0/1 分别读取开关/按钮，未定义输入读 0，输出指令不改变 PC/GPR 以外的架构状态。程序存储器未初始化地址与 RTL ROM 一样填 0，8 位加法和 PC 回绕均按 `uint8_t` 截断。
+
+### 10.2 比较时机与诊断
+
+DUT 复位两拍，REF 同时保持初始状态。每个测试周期先记录 REF 的当前 PC 和指令，再让 DUT 完成一个上升沿、REF 执行一次 `step()`，随后比较新 PC 和 R0~R3。发现差异时输出周期、执行前 PC、指令编码以及两侧完整 PC/GPR，返回 1；正常完成返回 0，参数或文件错误返回 2。
+
+`difftest_top.sv` 仅用于验证，不改变 `scpu.sv`。它通过层次引用导出 GPR，避免依赖 Verilator 自动生成的内部 C++ 变量名。当前 DiffTest 使用 `switches=10`、`buttons=0`，运行 40 拍，最终两侧均为 `PC=9`、`R0=10`、`R1=10`、`R2=55`、`R3=1`。
+
+### 10.3 故障注入
+
+故障注入在测试封装中对送入 sCPU 的指令按指定 PC 异或掩码，REF 始终执行原程序：
+
+- `fault-gpr`：在 PC5 将 `0x29` 异或 `0x10`，使目的寄存器由 R2 变为 R3。第 6 拍立即报告 `R2: dut=0 ref=1`。
+- `fault-pc`：在 PC6 将 `0xf9` 异或 `0x04`，使分支偏移由 -2 变为 -1。第 7 拍立即报告 `PC: dut=5 ref=4`。
+
+两个故障目标都要求 DiffTest 返回 1 才判定测试通过，防止“没有报错”被误当作检查器有效。
+
+### 10.4 实际命令与结果
+
+```bash
+make test
+make lint
+make clean
+```
+
+实际输出：
+
+```text
+SEMU: pc=9 R0=10 R1=10 R2=55 R3=1
+SEMU PASS: 1+2+...+10=55 after 40 instructions
+DIFFTEST PASS: 40 cycles, pc=9 R0=10 R1=10 R2=55 R3=1
+DIFFTEST MISMATCH: cycle=6 before_pc=5 inst=29
+R2: dut=0 ref=1
+FAULT-GPR PASS: DiffTest detected the injected destination-register error
+DIFFTEST MISMATCH: cycle=7 before_pc=6 inst=f9
+PC: dut=5 ref=4
+FAULT-PC PASS: DiffTest detected the injected branch-offset error
+```
+
+`make test` 和 `make lint` 均返回 0；原有 Icarus 五套程序仍为 483 项检查通过，Yosys 对 `scpu` 的结构检查仍为 0 个问题。
+
+当前 DiffTest 聚焦 E4 的数列求和程序和 PC/GPR 架构状态，不比较 LED/数码管事务，也不直接运行需要按钮等待的 `step_sum.hex`。这些边界由原有 SystemVerilog 定向测试覆盖。
