@@ -1,3 +1,4 @@
+// 参数化 D 触发器：异步低有效复位，时钟上升沿更新。
 module dff_pn #(
     parameter integer WIDTH = 1,
     parameter logic [WIDTH-1:0] RESET_VALUE = {WIDTH{1'b0}}

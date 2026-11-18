@@ -39,6 +39,7 @@ static uint8_t dut_reg(std::size_t index) {
 int main(int argc, char **argv) {
   Verilated::commandArgs(argc, argv);
 
+  // 可选参数依次为周期数、故障注入 PC 和指令异或掩码。
   const int cycles = argc > 1 ? std::atoi(argv[1]) : 40;
   const uint8_t inject_at =
       argc > 2 ? static_cast<uint8_t>(std::strtoul(argv[2], nullptr, 0)) : 0;
@@ -63,6 +64,7 @@ int main(int argc, char **argv) {
   dut.inject_mask = inject_mask;
   reset();
 
+  // 每拍各执行一条指令，再比较执行后的架构状态，定位首次偏离。
   for (int cycle = 1; cycle <= cycles; ++cycle) {
     const uint8_t before_pc = ref.pc();
     const uint8_t inst = ref.instruction();

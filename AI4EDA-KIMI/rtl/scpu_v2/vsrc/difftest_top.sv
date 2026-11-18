@@ -1,3 +1,4 @@
+// DiffTest 专用封装：不改变处理器内部实现，只导出状态并注入测试故障。
 module difftest_top #(
     parameter INIT_FILE = "sum_io.hex"
 ) (
@@ -20,6 +21,7 @@ module difftest_top #(
     logic [7:0] rom_instr;
     logic [7:0] cpu_instr;
 
+    // 在指定 PC 翻转指令位；inject_mask=0 时保持原始程序。
     assign cpu_instr = rom_instr ^ (pc == inject_at ? inject_mask : 8'h00);
 
     scpu_rom #(
@@ -42,6 +44,7 @@ module difftest_top #(
         .seven_seg_wdata (seven_seg_wdata)
     );
 
+    // 通过固定端口导出 GPR，避免 C++ 依赖 Verilator 内部变量名。
     assign gpr0 = u_cpu.u_gpr.regs[0];
     assign gpr1 = u_cpu.u_gpr.regs[1];
     assign gpr2 = u_cpu.u_gpr.regs[2];

@@ -1,3 +1,4 @@
+# NPC 风格目录：vsrc/ 放 RTL，csrc/ 放仿真器与 C++ 驱动，HEX 留在运行目录。
 CXX ?= g++
 VERILATOR ?= verilator
 CXXFLAGS ?= -O2
@@ -6,21 +7,24 @@ BUILD := build
 SEMU_BIN := $(BUILD)/semu
 DIFF_BIN := $(BUILD)/difftest
 DIFF_OBJ := $(BUILD)/obj_difftest
-RTL_SRCS := dff_pn.sv scpu.sv difftest_top.sv
+RTL_SRCS := vsrc/dff_pn.sv vsrc/scpu.sv vsrc/difftest_top.sv
+SEMU_SRCS := csrc/semu.cpp csrc/semu_main.cpp
+DIFF_SRCS := csrc/semu.cpp csrc/difftest_main.cpp
+SEMU_HDR := csrc/semu.h
 
 all: test
 
 $(BUILD):
 	mkdir -p $@
 
-$(SEMU_BIN): semu.cpp semu.h semu_main.cpp | $(BUILD)
-	$(CXX) -std=c++17 -Wall -Wextra -Werror $(CXXFLAGS) semu.cpp semu_main.cpp -o $@
+$(SEMU_BIN): $(SEMU_SRCS) $(SEMU_HDR) | $(BUILD)
+	$(CXX) -std=c++17 -Wall -Wextra -Werror $(CXXFLAGS) $(SEMU_SRCS) -o $@
 
-$(DIFF_BIN): $(RTL_SRCS) semu.cpp semu.h difftest_main.cpp Makefile | $(BUILD)
+$(DIFF_BIN): $(RTL_SRCS) $(DIFF_SRCS) $(SEMU_HDR) Makefile | $(BUILD)
 	$(VERILATOR) --cc --exe --build --top-module difftest_top \
 	  -Mdir $(DIFF_OBJ) -o $(abspath $(DIFF_BIN)) \
 	  -Wall -Wno-fatal -Wno-DECLFILENAME --x-assign fast --x-initial fast \
-	  $(RTL_SRCS) semu.cpp difftest_main.cpp \
+	  $(RTL_SRCS) $(DIFF_SRCS) \
 	  -CFLAGS "-std=c++17 -Wall -Wextra -Werror $(CXXFLAGS)"
 
 semu: $(SEMU_BIN)

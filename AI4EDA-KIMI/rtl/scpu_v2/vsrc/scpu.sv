@@ -46,12 +46,14 @@ module scpu #(
     assign is_bner0 = instr[7:6] == OP_BNER0;
     assign io_dir   = instr[3];
 
+    // bner0 固定比较 R0；io 与 add 的第一个源寄存器使用不同字段。
     assign raddr1 = is_bner0 ? 2'd0
                   : is_io    ? instr[5:4] : instr[3:2];
     assign raddr2 = instr[1:0];
     assign waddr  = instr[5:4];
     assign wen    = is_add || is_li || (is_io && !io_dir);
 
+    // li 把 2 位立即数按 instr[3:2] 左移 0/2/4/6 位。
     always_comb begin
         case (instr[3:2])
             2'b00: li_data = {6'b000000, instr[1:0]};
@@ -61,6 +63,7 @@ module scpu #(
         endcase
     end
 
+    // 设备编号只在 CPU 内部译码，各外设使用独立输入或写使能。
     assign io_rdata = instr[2:0] == 3'd0 ? switches
                     : instr[2:0] == 3'd1 ? buttons : 8'h00;
     assign add_data = rdata1 + rdata2;
@@ -72,10 +75,12 @@ module scpu #(
     assign seven_seg_wen  = rst_n && is_io && io_dir && instr[2:0] == 3'd1;
     assign seven_seg_wdata = rdata1;
 
+    // STEP_MODE 下，按钮输入指令是等待点；只有按钮上升沿才释放 PC。
     assign button_rise = |(buttons & ~buttons_d);
     assign wait_button = STEP_MODE && is_io && !io_dir && instr[2:0] == 3'd1;
     assign pc_wen      = !wait_button || button_rise;
 
+    // bner0 的 4 位有符号偏移相对当前 PC，而不是下一条指令。
     assign branch_offset = {{4{instr[5]}}, instr[5:2]};
     assign pc_step = is_bner0 && (rdata1 != rdata2) ? branch_offset : 8'd1;
     assign next_pc = pc + pc_step;
@@ -113,6 +118,7 @@ module scpu #(
     );
 endmodule
 
+// 4 个 8 位 GPR，共用两个组合读端口和一个时钟上升沿写端口。
 module scpu_gpr (
     input  logic       clk,
     input  logic       rst_n,

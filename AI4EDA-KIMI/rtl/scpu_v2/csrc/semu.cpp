@@ -48,6 +48,7 @@ void Semu::set_io(uint8_t switches, uint8_t buttons) {
   buttons_ = buttons;
 }
 
+// 每次调用执行一条指令；uint8_t 截断对应 sISA 的 8 位数据与 PC 回绕。
 void Semu::step() {
   const uint8_t inst = memory_[pc_];
   const uint8_t rd = (inst >> 4) & 0x3;
@@ -55,6 +56,7 @@ void Semu::step() {
   const uint8_t rs2 = inst & 0x3;
   uint8_t next_pc = static_cast<uint8_t>(pc_ + 1);
 
+  // 高两位是 opcode；各指令再按 sISA 格式解释剩余字段。
   switch (inst >> 6) {
   case 0:
     regs_[rd] = static_cast<uint8_t>(regs_[rs1] + regs_[rs2]);

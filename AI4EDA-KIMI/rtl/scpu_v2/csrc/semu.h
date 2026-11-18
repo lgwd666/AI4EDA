@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 
+// sISA 参考模型：只描述指令语义，不描述 RTL 的电路实现。
 class Semu {
 public:
   Semu();
