@@ -1,0 +1,17 @@
+*.*
+*
+!*/
+!Makefile
+!*.mk
+!*.[cSh]
+!*.v
+!*.sv
+!*.md
+!*.cc
+!*.cpp
+!.gitignore
+!README.md
+!AGENTS.md
+build/
+!*.nxdc
+!.gitkeep
