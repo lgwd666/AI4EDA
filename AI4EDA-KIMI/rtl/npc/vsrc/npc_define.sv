@@ -17,3 +17,6 @@ localparam logic [2:0] LOAD_LW = 3'b010;
 localparam logic [2:0] LOAD_LBU = 3'b100;
 localparam logic [2:0] STORE_SW = 3'b010;
 localparam logic [2:0] STORE_SB = 3'b000;
+
+localparam logic [2:0] IDLE = 3'b000;
+localparam logic [2:0] WAIT = 3'b00;
