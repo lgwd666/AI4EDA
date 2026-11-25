@@ -78,3 +78,10 @@
 - 始终使用中文；代码、命令、文件路径保持原文
 - 学习计划的原则：设计文档和关键决策必须出自用户本人（面试要讲得出来），
   AI 负责讲解、脚手架、review，不代替用户做核心设计决策
+
+## 共享盘备份规则
+
+- `AI4EDA-KIMI/docs/` 和 `AI4EDA-KIMI/ysyx-workbench/npc/vsrc/` 已备份到共享盘 `/home/lgwd666/work/work/AI4EDA-backup/`。
+- 同步脚本：`AI4EDA-KIMI/scripts/sync-to-work.sh`，通过 crontab 每分钟自动执行一次。
+- 主代理在修改上述两个目录后，应手动执行一次同步脚本，确保共享盘内容及时更新；随后检查 `scripts/sync-to-work.log` 确认无错误。
+- 共享盘为 NFS，rsync 使用 `-rlptD --delete`（不保留 owner/group），避免 `chgrp` 权限错误。

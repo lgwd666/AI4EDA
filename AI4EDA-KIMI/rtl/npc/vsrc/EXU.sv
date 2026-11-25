@@ -1,5 +1,4 @@
 module EXU (
-    input  logic [2: 0] npc_state,
     input  logic [31:0] pc,
     input  logic [6: 0] opcode,
     input  logic [2: 0] funt3,
@@ -32,8 +31,7 @@ module EXU (
                      (opcode==LOAD)&(funt3==LOAD_LW) ? mem_rdata :
                      (opcode==LOAD)&(funt3==LOAD_LBU) ? {24'b0, mem_rdata_lb} : 32'b0;
 
-    assign rd_wen = npc_state==IDLE ? 1'b0 : 
-                    (opcode==OP_IMM)&(funt3==OP_IMM_FUNT3_ADD) ? 1'b1 :
+    assign rd_wen = (opcode==OP_IMM)&(funt3==OP_IMM_FUNT3_ADD) ? 1'b1 :
                     (opcode==JALR) ? 1'b1 : 
                     (opcode==OP)&(funt3==OP_FUNT3_ADD) ? 1'b1 : 
                     (opcode==LUI) ? 1'b1 : 
@@ -45,7 +43,7 @@ module EXU (
 
     assign mem_addr = (opcode==STORE)||(opcode==LOAD) ? rs1_data + {{20{imm[11]}}, imm[11:0]} : 32'b0;
     assign mem_valid = (opcode==LOAD)||(opcode==STORE);
-    assign mem_wen = npc_state==IDLE ? 1'b0 : (opcode==STORE) ? 1'b1 : 1'b0;
+    assign mem_wen = (opcode==STORE) ? 1'b1 : 1'b0;
     assign mem_wdata = (opcode==STORE)&(funt3==STORE_SW) ? rs2_data : 
                        (opcode==STORE)&(funt3==STORE_SB) ? (
                            mem_addr[1:0] == 2'b00 ? {24'b0, rs2_data[7:0]} :
